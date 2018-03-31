@@ -81,7 +81,7 @@ unsigned int tcp_obfuscation_service_outgoing (
 				int len;
 				int offset;
 
-				/* NAT has no sk entity */
+				/* @czom: NAT has no sk entity */
 				if (NULL != skb->sk) {
 
 					skb->sk->sk_no_check_tx = 1;

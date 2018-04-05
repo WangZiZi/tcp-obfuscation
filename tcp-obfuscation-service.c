@@ -73,6 +73,9 @@ unsigned int tcp_obfuscation_service_outgoing (
 
 			unsigned char * payload = ((unsigned char *) ipv4_header) + iph_len;
 
+			/* disable GSO */
+			skb_gso_reset(skb);
+
 			/* calc the checksum manually */
 			if (IPPROTO_UDP == ipv4_header->protocol) {
 
@@ -81,14 +84,7 @@ unsigned int tcp_obfuscation_service_outgoing (
 				int len;
 				int offset;
 
-				/* @czom: NAT has no sk entity */
-				if (NULL != skb->sk) {
-
-					skb->sk->sk_no_check_tx = 1;
-
-				}
-
-				skb->ip_summed = CHECKSUM_NONE;
+				skb->ip_summed = CHECKSUM_UNNECESSARY;
 
 				offset = skb_transport_offset(skb);
 				len = skb->len - offset;

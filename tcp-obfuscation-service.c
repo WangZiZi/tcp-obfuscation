@@ -104,18 +104,14 @@ unsigned int tcp_obfuscation_service_outgoing (
 
 				__wsum csum;
 				struct tcphdr * th;
-				int len;
-				int offset;
 
 				skb->ip_summed = CHECKSUM_UNNECESSARY;
 
-				offset = skb_transport_offset(skb);
-				len = skb->len - offset;
 				th = tcp_hdr(skb);
 
 				th->check = 0;
 				csum = csum_partial(payload, payload_len, 0);
-				th->check = csum_tcpudp_magic(ipv4_header->saddr, ipv4_header->daddr, len, IPPROTO_TCP, csum);
+				th->check = csum_tcpudp_magic(ipv4_header->saddr, ipv4_header->daddr, payload_len, IPPROTO_TCP, csum);
 				if (th->check == 0) {
 
 					th->check = CSUM_MANGLED_0;

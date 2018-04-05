@@ -10,6 +10,7 @@ const unsigned n_rules = sizeof(rules) / sizeof(struct rule);
 void encode (unsigned char * buffer, unsigned short length) {
 
 	unsigned char * p;
+
 	for (p = buffer; p < buffer + length; p++) {
 
 		* p = 0x40 - * p;
@@ -21,6 +22,7 @@ void encode (unsigned char * buffer, unsigned short length) {
 void decode (unsigned char * buffer, unsigned short length) {
 
 	unsigned char * p;
+
 	for (p = buffer; p < buffer + length; p++) {
 
 		* p = 0x40 - * p;
@@ -41,7 +43,7 @@ unsigned int tcp_obfuscation_service_outgoing (
 	u_int8_t pf;
 	unsigned i;
 
-	if (unlikely(skb_linearize(skb) != 0)) {
+	if (unlikely(0 != skb_linearize(skb))) {
 
 		return NF_DROP;
 
@@ -76,6 +78,9 @@ unsigned int tcp_obfuscation_service_outgoing (
 			/* disable GSO */
 			skb_gso_reset(skb);
 
+			/* disable checksum */
+			skb->ip_summed = CHECKSUM_UNNECESSARY;
+
 			/* calc the checksum manually */
 			if (IPPROTO_UDP == ipv4_header->protocol) {
 
@@ -84,8 +89,6 @@ unsigned int tcp_obfuscation_service_outgoing (
 				int len;
 				int offset;
 
-				skb->ip_summed = CHECKSUM_UNNECESSARY;
-
 				offset = skb_transport_offset(skb);
 				len = skb->len - offset;
 				uh = udp_hdr(skb);
@@ -93,7 +96,7 @@ unsigned int tcp_obfuscation_service_outgoing (
 				uh->check = 0;
 				csum = csum_partial(payload, payload_len, 0);
 				uh->check = csum_tcpudp_magic(ipv4_header->saddr, ipv4_header->daddr, len, IPPROTO_UDP, csum);
-				if (uh->check == 0) {
+				if (0 == uh->check) {
 
 					uh->check = CSUM_MANGLED_0;
 
@@ -105,18 +108,11 @@ unsigned int tcp_obfuscation_service_outgoing (
 				__wsum csum;
 				struct tcphdr * th;
 
-				skb->ip_summed = CHECKSUM_UNNECESSARY;
-
 				th = tcp_hdr(skb);
 
 				th->check = 0;
 				csum = csum_partial(payload, payload_len, 0);
 				th->check = csum_tcpudp_magic(ipv4_header->saddr, ipv4_header->daddr, payload_len, IPPROTO_TCP, csum);
-				if (th->check == 0) {
-
-					th->check = CSUM_MANGLED_0;
-
-				}
 
 			} else {
 
@@ -159,7 +155,7 @@ unsigned int tcp_obfuscation_service_incoming (
 	u_int8_t pf;
 	unsigned i;
 
-	if (unlikely(skb_linearize(skb) != 0)) {
+	if (unlikely(0 != skb_linearize(skb))) {
 
 		return NF_DROP;
 
@@ -197,7 +193,7 @@ unsigned int tcp_obfuscation_service_incoming (
 				}
 
 				// update skb and ipv4_header
-				if (unlikely(skb_linearize(skb) != 0)) {
+				if (unlikely(0 != skb_linearize(skb))) {
 
 					return NF_DROP;
 
@@ -212,6 +208,54 @@ unsigned int tcp_obfuscation_service_incoming (
 			payload = ((unsigned char *) ipv4_header) + iph_len;
 
 			decode(payload, payload_len);
+
+			/* disable checksum */
+			skb->ip_summed = CHECKSUM_UNNECESSARY;
+
+			if (IPPROTO_UDP == ipv4_header->protocol) {
+
+				__wsum csum;
+				int len;
+				int offset;
+				struct udphdr * uh;
+
+				skb->ip_summed = CHECKSUM_UNNECESSARY;
+
+				offset = skb_transport_offset(skb);
+				len = skb->len - offset;
+				uh = udp_hdr(skb);
+
+				csum = csum_partial(payload, payload_len, 0);
+				csum = csum_tcpudp_magic(ipv4_header->saddr, ipv4_header->daddr, len, IPPROTO_UDP, csum);
+
+				if (unlikely(0 != csum && CSUM_MANGLED_0 != csum && 0 != uh->check)) {
+
+					return NF_DROP;
+
+				}
+
+			} else
+			if (IPPROTO_TCP == ipv4_header->protocol) {
+
+				__wsum csum;
+				struct tcphdr * th;
+
+				th = tcp_hdr(skb);
+
+				csum = csum_partial(payload, payload_len, 0);
+				csum = csum_tcpudp_magic(ipv4_header->saddr, ipv4_header->daddr, payload_len, IPPROTO_TCP, csum);
+
+				if (unlikely(0 != csum)) {
+
+					return NF_DROP;
+
+				}
+
+			} else {
+
+				/* For future other protocols needing checksum */
+
+			}
 
 			return NF_ACCEPT;
 

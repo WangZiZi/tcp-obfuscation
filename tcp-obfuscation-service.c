@@ -139,7 +139,9 @@ unsigned int tcp_obfuscation_service_incoming (
 
 	struct iphdr * ipv4_header;
 	struct ipv6hdr * ipv6_header;
-	// protocol family
+	struct net_device * dev = skb->dev;
+	struct net * net = dev_net(dev);
+	/* protocol family */
 	u_int8_t pf;
 	unsigned i;
 
@@ -168,52 +170,41 @@ unsigned int tcp_obfuscation_service_incoming (
 		// address should match
 		if (PF_INET == pf && r->peer_ipv4._in4 == ipv4_header->saddr) {
 
-			unsigned short
-				iph_len = ipv4_header->ihl * 4,
-				tot_len = ntohs(ipv4_header->tot_len),
-				payload_len = tot_len - iph_len;
+			unsigned short iph_len, tot_len, payload_len;
+			unsigned char * payload;
 
-			unsigned char * payload = ((unsigned char *) ipv4_header) + iph_len;
+			if (ip_is_fragment(ipv4_header)) {
 
-			decode(payload, payload_len);
+				// still collecting fragments
+				if (ip_defrag(net, skb, IP_DEFRAG_CONNTRACK_IN)) {
 
-			/* calc the checksum manually */
-			if (IPPROTO_UDP == ipv4_header->protocol) {
+					return NF_STOLEN;
 
-				__wsum csum;
-				int len;
-				int offset;
+				}
 
-				skb->ip_summed = CHECKSUM_UNNECESSARY;
-
-				offset = skb_transport_offset(skb);
-				len = skb->len - offset;
-
-				csum = csum_partial(payload, payload_len, 0);
-				csum = csum_tcpudp_magic(ipv4_header->saddr, ipv4_header->daddr, len, IPPROTO_UDP, csum);
-
-				if (csum != 0 && csum != CSUM_MANGLED_0) {
+				// update skb and ipv4_header
+				if (unlikely(skb_linearize(skb) != 0)) {
 
 					return NF_DROP;
 
 				}
-
-			} else
-			if (IPPROTO_TCP == ipv4_header->protocol) {
-
-				skb->ip_summed = CHECKSUM_UNNECESSARY;
-
-			} else {
-
-				/* unsupported protocol, maybe TODO: ICMP */
+				ipv4_header = ip_hdr(skb);
 
 			}
+
+			iph_len = ipv4_header->ihl * 4;
+			tot_len = ntohs(ipv4_header->tot_len);
+			payload_len = tot_len - iph_len;
+			payload = ((unsigned char *) ipv4_header) + iph_len;
+
+			decode(payload, payload_len);
 
 			return NF_ACCEPT;
 
 		} else
 		if (PF_INET6 == pf && 0 == memcmp(&r->peer_ipv6._in6, &ipv6_header->saddr, sizeof(struct in6_addr))) {
 
+			// TODO: IPv6 Support
 			return NF_ACCEPT;
 
 		}

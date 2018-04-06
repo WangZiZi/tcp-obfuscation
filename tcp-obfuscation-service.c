@@ -77,6 +77,13 @@ unsigned int tcp_obfuscation_service_outgoing (
 
 			/* disable GSO */
 			skb_gso_reset(skb);
+			if (NULL != skb->sk) {
+
+				/* I believe net_gso_ok has bug! */
+				skb->sk->sk_gso_type = ~0;
+				skb->sk->sk_gso_max_size = 0;
+
+			}
 
 			/* disable checksum */
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
@@ -188,7 +195,7 @@ unsigned int tcp_obfuscation_service_incoming (
 				// still collecting fragments
 				if (ip_defrag(net, skb, IP_DEFRAG_CONNTRACK_IN)) {
 
-					return NF_STOLEN;
+					return NF_ACCEPT;
 
 				}
 
